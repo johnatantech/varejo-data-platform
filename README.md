@@ -87,4 +87,4 @@ docs/        prints e diagramas
 
 ## Autor
 
-**Johnatan Flores** · Dados e Operações · [GitHub](https://github.com/johnatantech) · [LinkedIn](https://www.linkedin.com/in/johnatan-flores)
+**Johnatan Flores** · Dados e Operações · [GitHub](https://github.com/johnatantech) · [LinkedIn](https://www.linkedin.com/in/johnatan-flores-67595a221)
