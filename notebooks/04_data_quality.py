@@ -169,3 +169,18 @@ display(last.groupBy("status").count())
 display(last.orderBy(F.col("status").desc(), "severity", "check_id")
         .select("check_id", "check_name", "severity", "total_records",
                 "failed_records", "failure_rate", "threshold", "status", "details"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Portão de qualidade
+# MAGIC Se houver falha **crítica**, a task falha (visível no Workflow). O resultado já foi gravado acima
+# MAGIC e a task de alertas roda mesmo assim (`Run if: All done`) para avisar o time.
+
+# COMMAND ----------
+
+critical_fails = last.filter("status = 'FAIL' AND severity = 'critical'").collect()
+if critical_fails:
+    ids = ", ".join(r["check_id"] for r in critical_fails)
+    raise Exception(f"Qualidade: {len(critical_fails)} regra(s) crítica(s) com falha: {ids}")
+print("Nenhuma falha crítica.")

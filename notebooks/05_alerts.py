@@ -22,13 +22,30 @@ from pyspark.sql.window import Window
 CATALOG = "workspace"
 SCHEMA = "varejo"
 
-dbutils.widgets.text("as_of_date", "2017-11-24", "Data de referência (YYYY-MM-DD)")
+dbutils.widgets.text("as_of_date", "auto", "Data (YYYY-MM-DD) ou 'auto' = relógio de simulação")
 dbutils.widgets.dropdown("send_test", "false", ["false", "true"], "Enviar mensagem de teste")
-AS_OF_DATE = dbutils.widgets.get("as_of_date")
 SEND_TEST = dbutils.widgets.get("send_test") == "true"
 
 # Janela estável do dataset (2016 e o fim de 2018 têm poucos pedidos e gerariam falsos alarmes)
 SERIES_START, SERIES_END = "2017-01-01", "2018-08-29"
+
+# Relógio de simulação: no modo 'auto', cada execução avalia um dia e avança para o seguinte.
+STATE_TABLE = f"{CATALOG}.{SCHEMA}.pipeline_state"
+SIM_START = "2017-11-20"   # a Black Friday (2017-11-24) cai na 5ª execução
+
+
+def read_sim_date():
+    try:
+        r = spark.table(STATE_TABLE).filter("key = 'sim_date'").first()
+        return r["value"] if r else SIM_START
+    except Exception:
+        return SIM_START
+
+
+AS_OF_RAW = dbutils.widgets.get("as_of_date").strip()
+AUTO = AS_OF_RAW.lower() == "auto"
+AS_OF_DATE = read_sim_date() if AUTO else AS_OF_RAW
+print(f"Data de referência: {AS_OF_DATE} ({'relógio de simulação' if AUTO else 'manual'})")
 ROLLING_DAYS = 28
 MIN_HISTORY = 14
 Z_THRESHOLD = 3.0
@@ -194,3 +211,19 @@ try:
     display(spark.table(f"{CATALOG}.{SCHEMA}.alerts_log").orderBy(F.desc("created_ts")).limit(10))
 except Exception:
     print("alerts_log ainda não existe (nenhum alerta gerado até agora).")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Avança o relógio de simulação (somente no modo auto)
+
+# COMMAND ----------
+
+if AUTO:
+    from datetime import date, timedelta
+    nxt = date.fromisoformat(AS_OF_DATE) + timedelta(days=1)
+    if nxt > date.fromisoformat(SERIES_END):
+        nxt = date.fromisoformat(SIM_START)   # fim da base: recomeça o ciclo
+    (spark.createDataFrame([("sim_date", nxt.isoformat())], "key string, value string")
+          .write.format("delta").mode("overwrite").saveAsTable(STATE_TABLE))
+    print(f"Relógio avançado: {AS_OF_DATE} -> {nxt.isoformat()}")
