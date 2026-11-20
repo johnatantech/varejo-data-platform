@@ -1,0 +1,935 @@
+{
+  "datasets": [
+    {
+      "name": "5e40ade1",
+      "displayName": "kpis_gerais",
+      "queryLines": [
+        "SELECT\r\n",
+        "  ROUND(SUM(CASE WHEN is_valid_sale THEN items_value END), 2)                       AS gmv,\r\n",
+        "  COUNT_IF(is_valid_sale)                                                           AS pedidos_validos,\r\n",
+        "  ROUND(SUM(CASE WHEN is_valid_sale THEN items_value END)\r\n",
+        "        / COUNT_IF(is_valid_sale), 2)                                               AS ticket_medio,\r\n",
+        "  ROUND(COUNT_IF(is_late) / COUNT_IF(is_late IS NOT NULL), 4)                       AS taxa_atraso,\r\n",
+        "  ROUND(COUNT_IF(order_status = 'canceled') / COUNT(*), 4)                          AS taxa_cancelamento,\r\n",
+        "  ROUND(AVG(review_score), 2)                                                       AS nota_media\r\n",
+        "FROM workspace.varejo.gold_fact_orders"
+      ]
+    },
+    {
+      "name": "995fd83e",
+      "displayName": "vendas_mensais",
+      "queryLines": [
+        "SELECT\r\n",
+        "  DATE_TRUNC('month', purchase_date)        AS mes,\r\n",
+        "  ROUND(SUM(gmv), 2)                        AS gmv,\r\n",
+        "  SUM(valid_orders)                         AS pedidos_validos,\r\n",
+        "  ROUND(SUM(gmv) / SUM(valid_orders), 2)    AS ticket_medio\r\n",
+        "FROM workspace.varejo.gold_daily_sales\r\n",
+        "WHERE purchase_date >= '2017-01-01' AND purchase_date < '2018-09-01'\r\n",
+        "GROUP BY DATE_TRUNC('month', purchase_date)\r\n",
+        "ORDER BY mes;"
+      ]
+    },
+    {
+      "name": "8900d952",
+      "displayName": "volume_diario_anomalias",
+      "queryLines": [
+        "SELECT\r\n",
+        "  purchase_date,\r\n",
+        "  orders                          AS pedidos,\r\n",
+        "  ROUND(orders_mean, 1)           AS media_28d,\r\n",
+        "  orders_z                        AS z_score,\r\n",
+        "  is_anomaly,\r\n",
+        "  CASE WHEN is_anomaly THEN orders END AS pedidos_anomalos\r\n",
+        "FROM workspace.varejo.gold_volume_anomalies\r\n",
+        "ORDER BY purchase_date;"
+      ]
+    },
+    {
+      "name": "b135f3b4",
+      "displayName": "sla_por_estado",
+      "queryLines": [
+        "SELECT\r\n",
+        "  customer_state                                                      AS estado,\r\n",
+        "  SUM(delivered_orders)                                               AS entregas,\r\n",
+        "  ROUND(SUM(late_orders) / SUM(delivered_orders), 4)                  AS taxa_atraso,\r\n",
+        "  ROUND(SUM(avg_delivery_days * delivered_orders)\r\n",
+        "        / SUM(delivered_orders), 1)                                   AS prazo_medio_dias\r\n",
+        "FROM workspace.varejo.gold_delivery_sla\r\n",
+        "GROUP BY customer_state\r\n",
+        "HAVING SUM(delivered_orders) >= 500\r\n",
+        "ORDER BY taxa_atraso DESC;"
+      ]
+    },
+    {
+      "name": "6b19f085",
+      "displayName": "top_categorias",
+      "queryLines": [
+        "SELECT\r\n",
+        "  category                       AS categoria,\r\n",
+        "  ROUND(gmv, 2)                  AS gmv,\r\n",
+        "  orders                         AS pedidos,\r\n",
+        "  avg_review                     AS nota_media,\r\n",
+        "  ROUND(low_score_rate * 100, 1) AS pct_notas_baixas\r\n",
+        "FROM workspace.varejo.gold_category_satisfaction\r\n",
+        "ORDER BY gmv DESC\r\n",
+        "LIMIT 15;"
+      ]
+    },
+    {
+      "name": "3e8ee1ef",
+      "displayName": "concentracao_vendedores",
+      "queryLines": [
+        "SELECT\r\n",
+        "  gmv_rank                                   AS ranking_vendedor,\r\n",
+        "  ROUND(gmv_cumulative_share * 100, 1)       AS pct_gmv_acumulado\r\n",
+        "FROM workspace.varejo.gold_seller_performance\r\n",
+        "WHERE gmv_rank = 1 OR gmv_rank % 25 = 0\r\n",
+        "ORDER BY gmv_rank;"
+      ]
+    },
+    {
+      "name": "9f0a9715",
+      "displayName": "qualidade_ultima_execucao",
+      "queryLines": [
+        "SELECT\r\n",
+        "  check_id, check_name, severity, total_records, failed_records,\r\n",
+        "  ROUND(failure_rate * 100, 3) AS pct_falha,\r\n",
+        "  ROUND(threshold * 100, 3)    AS pct_limite,\r\n",
+        "  status\r\n",
+        "FROM workspace.varejo.quality_results\r\n",
+        "WHERE run_id = (SELECT run_id FROM workspace.varejo.quality_results ORDER BY run_ts DESC LIMIT 1)\r\n",
+        "ORDER BY status ASC, severity, check_id;"
+      ]
+    },
+    {
+      "name": "136c5c56",
+      "displayName": "alertas_recentes",
+      "queryLines": [
+        "SELECT created_ts, as_of_date, alert_type, severity, title, sent\r\n",
+        "FROM workspace.varejo.alerts_log\r\n",
+        "ORDER BY created_ts DESC\r\n",
+        "LIMIT 20;\r\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "95aee0c9",
+      "displayName": "Visão Geral",
+      "layout": [
+        {
+          "widget": {
+            "name": "gm",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "995fd83e",
+                  "fields": [
+                    {
+                      "name": "monthly(mes)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `mes`)"
+                    },
+                    {
+                      "name": "gmv",
+                      "expression": "`gmv`"
+                    },
+                    {
+                      "name": "ticket_medio",
+                      "expression": "`ticket_medio`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "GMV e ticket médio por mês"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(mes)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "primary": {
+                    "fields": [
+                      {
+                        "fieldName": "gmv",
+                        "displayName": "GMV (R$)"
+                      }
+                    ],
+                    "scale": {
+                      "type": "quantitative"
+                    }
+                  },
+                  "secondary": {
+                    "fields": [
+                      {
+                        "fieldName": "ticket_medio",
+                        "displayName": "Ticket médio (R$)"
+                      }
+                    ],
+                    "scale": {
+                      "type": "quantitative"
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 5,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "826829b4",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8900d952",
+                  "fields": [
+                    {
+                      "name": "purchase_date",
+                      "expression": "`purchase_date`"
+                    },
+                    {
+                      "name": "pedidos",
+                      "expression": "`pedidos`"
+                    },
+                    {
+                      "name": "media_28d",
+                      "expression": "`media_28d`"
+                    },
+                    {
+                      "name": "pedidos_anomalos",
+                      "expression": "`pedidos_anomalos`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Pedidos diários e anomalias"
+              },
+              "version": 3,
+              "mark": {
+                "colors": [
+                  null,
+                  null,
+                  "#FF3621"
+                ],
+                "linePatterns": [
+                  null,
+                  "dashed",
+                  null
+                ],
+                "marker": {
+                  "shape": "circle"
+                }
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "purchase_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fields": [
+                    {
+                      "fieldName": "pedidos",
+                      "displayName": "Pedidos"
+                    },
+                    {
+                      "fieldName": "media_28d",
+                      "displayName": "Média móvel 28d"
+                    },
+                    {
+                      "fieldName": "pedidos_anomalos",
+                      "displayName": "Anomalias"
+                    }
+                  ],
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 7,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_gmv",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "avg(gmv)",
+                      "expression": "AVG(`gmv`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "GMV",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(gmv)",
+                  "rowNumber": 0,
+                  "format": {
+                    "abbreviation": "compact",
+                    "currencyCode": "BRL",
+                    "decimalPlaces": {
+                      "places": 1,
+                      "type": "max"
+                    },
+                    "type": "number-currency"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_taxa_atraso",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "avg(taxa_atraso)",
+                      "expression": "AVG(`taxa_atraso`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Taxa de atraso",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(taxa_atraso)",
+                  "rowNumber": 0,
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 2,
+                      "type": "max"
+                    },
+                    "type": "number-percent"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "atraso_por_estado",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b135f3b4",
+                  "fields": [
+                    {
+                      "name": "estado",
+                      "expression": "`estado`"
+                    },
+                    {
+                      "name": "avg(taxa_atraso)",
+                      "expression": "AVG(`taxa_atraso`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Atraso por estado",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "estado",
+                  "displayName": "estado",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(taxa_atraso)",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 1,
+                      "type": "max"
+                    },
+                    "type": "number-percent"
+                  },
+                  "displayName": "Taxa de atraso",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "categorias_gmv",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "6b19f085",
+                  "fields": [
+                    {
+                      "name": "avg(gmv)",
+                      "expression": "AVG(`gmv`)"
+                    },
+                    {
+                      "name": "categoria",
+                      "expression": "`categoria`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Categorias",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "avg(gmv)",
+                  "format": {
+                    "abbreviation": "compact",
+                    "currencyCode": "BRL",
+                    "decimalPlaces": {
+                      "places": 1,
+                      "type": "max"
+                    },
+                    "type": "number-currency"
+                  },
+                  "displayName": "GMV (R$)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "categoria",
+                  "displayName": "categoria",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 9,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "concentracao_vendedores",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "3e8ee1ef",
+                  "fields": [
+                    {
+                      "name": "ranking_vendedor",
+                      "expression": "`ranking_vendedor`"
+                    },
+                    {
+                      "name": "avg(pct_gmv_acumulado)",
+                      "expression": "AVG(`pct_gmv_acumulado`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Concentração de vendedores"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "ranking_vendedor",
+                  "displayName": "ranking_vendedor",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(pct_gmv_acumulado)",
+                  "displayName": "GMV acumulado (%)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "qualidade_tabela",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "9f0a9715",
+                  "fields": [
+                    {
+                      "name": "check_id",
+                      "expression": "`check_id`"
+                    },
+                    {
+                      "name": "check_name",
+                      "expression": "`check_name`"
+                    },
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "total_records",
+                      "expression": "`total_records`"
+                    },
+                    {
+                      "name": "failed_records",
+                      "expression": "`failed_records`"
+                    },
+                    {
+                      "name": "pct_falha",
+                      "expression": "`pct_falha`"
+                    },
+                    {
+                      "name": "pct_limite",
+                      "expression": "`pct_limite`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Qualidade",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "check_id"
+                  },
+                  {
+                    "fieldName": "check_name"
+                  },
+                  {
+                    "fieldName": "severity"
+                  },
+                  {
+                    "fieldName": "total_records"
+                  },
+                  {
+                    "fieldName": "failed_records"
+                  },
+                  {
+                    "fieldName": "pct_falha"
+                  },
+                  {
+                    "fieldName": "pct_limite"
+                  },
+                  {
+                    "fieldName": "status"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 15,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "0dd81bfc",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "995fd83e",
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {}
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 21,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_pedidos",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "sum(pedidos_validos)",
+                      "expression": "SUM(`pedidos_validos`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Pedidos válidos"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(pedidos_validos)",
+                  "format": {
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "places": 0,
+                      "type": "max"
+                    },
+                    "type": "number-plain"
+                  },
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_ticket",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "avg(ticket_medio)",
+                      "expression": "AVG(`ticket_medio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Ticket médio"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(ticket_medio)",
+                  "format": {
+                    "abbreviation": "none",
+                    "currencyCode": "BRL",
+                    "decimalPlaces": {
+                      "places": 2,
+                      "type": "max"
+                    },
+                    "type": "number-currency"
+                  },
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_taxa_cancelamento",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "avg(taxa_cancelamento)",
+                      "expression": "AVG(`taxa_cancelamento`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Taxa de cancelamento"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(taxa_cancelamento)",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 2,
+                      "type": "max"
+                    },
+                    "type": "number-percent"
+                  },
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_nota_media",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5e40ade1",
+                  "fields": [
+                    {
+                      "name": "avg(nota_media)",
+                      "expression": "AVG(`nota_media`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Nota média"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(nota_media)",
+                  "format": {
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "places": 2,
+                      "type": "max"
+                    },
+                    "type": "number-plain"
+                  },
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 10,
+            "y": 6,
+            "width": 2,
+            "height": 3
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
