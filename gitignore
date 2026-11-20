@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Dados (nunca versionar datasets)
+*.csv
+data/
+
+# IDE / OS
+.vscode/
+.DS_Store
+.ipynb_checkpoints/
+
+# Segredos
+*.token
+secrets*

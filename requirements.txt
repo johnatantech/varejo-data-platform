@@ -1,0 +1,4 @@
+pandas
+pytest
+requests
+# streamlit  (descomente quando chegar na etapa do dashboard)
